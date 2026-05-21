@@ -1,11 +1,11 @@
 #!/bin/bash
 
-# DEV-Agent 全部实例启动脚本
+# DEV-Agent 全部服务启动脚本
 # 使用方法: ./start-all.sh
 
 set -e
 
-echo "🚀 DEV-Agent 多实例启动"
+echo "🚀 DEV-Agent 多服务启动"
 echo "========================"
 
 # 检查 Hermes 是否已安装
@@ -16,20 +16,20 @@ fi
 
 echo "✅ Hermes 已安装"
 
-# 定义实例配置
-declare -A INSTANCES=(
+# 定义 Agent 配置
+declare -A AGENTS=(
     ["dev-frontend"]="8201:~/.hermes-dev-frontend:前端开发 Agent"
     ["dev-backend"]="8202:~/.hermes-dev-backend:后端开发 Agent"
     ["dev-testing"]="8203:~/.hermes-dev-testing:测试开发 Agent"
     ["dev-devops"]="8204:~/.hermes-dev-devops:DevOps Agent"
 )
 
-# 启动每个实例
-for instance in "${!INSTANCES[@]}"; do
-    IFS=':' read -r port home_dir label <<< "${INSTANCES[$instance]}"
+# 启动每个 Agent
+for agent in "${!AGENTS[@]}"; do
+    IFS=':' read -r port home_dir label <<< "${AGENTS[$agent]}"
     
     echo ""
-    echo "📦 启动 $label ($instance)..."
+    echo "📦 启动 $label ($agent)..."
     
     # 创建配置目录
     mkdir -p "$home_dir"
@@ -73,8 +73,8 @@ echo ""
 echo "🎉 所有 Agent 已启动！"
 echo ""
 echo "📋 Agent 状态："
-for instance in "${!INSTANCES[@]}"; do
-    IFS=':' read -r port home_dir label <<< "${INSTANCES[$instance]}"
+for agent in "${!AGENTS[@]}"; do
+    IFS=':' read -r port home_dir label <<< "${AGENTS[$agent]}"
     if curl -s "http://127.0.0.1:$port/health" > /dev/null 2>&1; then
         echo "   ✅ $label (端口 $port) - 运行中"
     else
@@ -84,6 +84,6 @@ done
 
 echo ""
 echo "📋 下一步："
-echo "   1. 测试路由: openclaw agent --local -m \"帮我创建 React 组件\""
-echo "   2. 查看日志: tail -f ~/.hermes-dev-*/logs/gateway.log"
+echo "   1. 启动 Gateway: ./start-gateway.sh"
+echo "   2. 测试路由: ./test-routing.sh"
 echo "   3. 停止所有实例: pkill -f 'hermes gateway run'"
