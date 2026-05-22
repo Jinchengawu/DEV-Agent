@@ -1,104 +1,97 @@
 # DEV-Agent
 
-> 基于 AI-local-OS 架构的开发者多 Agent 协同系统
+> 基于 OpenClaw + Hermes 架构的开发者多 Agent 协同系统
 
-## 项目定位
+## 架构概述
 
-DEV-Agent 是一个专为软件开发者设计的多 Agent 协同系统，将不同开发角色（前端、后端、测试、DevOps）拆分为独立的 Agent 实例，通过智能路由实现任务自动分发。
-
-## 核心架构
+DEV-Agent 是一个基于 OpenClaw 编排内核和 Hermes 垂类 Agent 的多 Agent 协同系统，专为软件开发者设计。
 
 ```
-用户请求 → DEV Gateway → 角色路由 → 专用 Agent → 结果聚合
+用户请求 → OpenClaw 内核 → 意图分析 → Agent 路由
                 │
-                ├── 前端 Agent (React/Vue/TypeScript)
-                ├── 后端 Agent (Python/Node.js/Go)
-                ├── 测试 Agent (单元/集成/E2E)
-                └── DevOps Agent (CI/CD/Docker/K8s)
+    ┌───────────┼───────────┬───────────┐
+    │           │           │           │
+    ▼           ▼           ▼           ▼
+┌────────┐ ┌────────┐ ┌────────┐ ┌────────┐
+│frontend│ │backend │ │testing │ │devops  │
+│Hermes  │ │Hermes  │ │Hermes  │ │Hermes  │
+│ :8201  │ │ :8202  │ │ :8203  │ │ :8204  │
+└────────┘ └────────┘ └────────┘ └────────┘
 ```
 
 ## 技术栈
 
 | 组件 | 技术 | 说明 |
 |------|------|------|
-| 编排内核 | AI-local-OS Gateway | 统一路由、鉴权、限流 |
-| Agent 运行时 | Hermes Agent | 垂类深度执行 |
-| 前端 Agent | React/Vue/TypeScript | 前端开发专用 |
-| 后端 Agent | Python/Node.js/Go | 后端开发专用 |
-| 测试 Agent | pytest/Jest/Vitest | 测试专用 |
-| DevOps Agent | Docker/K8s/Terraform | 运维专用 |
+| 编排内核 | OpenClaw | 多 Agent 协同框架 |
+| Agent 运行时 | Hermes | 垂类深度执行 |
+| 前端 | React/Vue/TypeScript | 前端开发专用 |
+| 后端 | Python/Node.js/Go | 后端开发专用 |
+| 测试 | pytest/Jest/Playwright | 测试开发专用 |
+| DevOps | Docker/K8s/CI-CD | 运维部署专用 |
 
 ## 快速开始
 
 ```bash
-# 1. 克隆仓库
-git clone https://github.com/Jinchengawu/DEV-Agent.git
-cd DEV-Agent
+# 1. 安装依赖
+npm install
 
-# 2. 启动所有 Agent
-./scripts/start-all.sh
+# 2. 启动所有服务（OpenClaw + Hermes + Agent）
+./scripts/start-openclaw.sh
 
 # 3. 测试路由
-./scripts/test-routing.sh
+openclaw agent --local -m "帮我创建 React 组件"
+```
+
+## 项目结构
+
+```
+DEV-Agent/
+├── README.md
+├── config/
+│   └── openclaw/
+│       └── instances.yaml        # Agent 实例配置
+├── packages/
+│   ├── gateway/                  # 网关服务（备用）
+│   └── openclaw/                 # OpenClaw 集成
+├── plugins/
+│   └── ai-router/                # AI 路由插件
+│       ├── HOOK.md
+│       └── handler.ts
+├── scripts/
+│   ├── start-all.sh              # 启动所有 Agent
+│   ├── start-openclaw.sh         # 启动 OpenClaw
+│   └── test-gateway.sh           # 测试路由
+├── skills/
+│   ├── frontend/                 # 前端技能（9 个）
+│   ├── backend/                  # 后端技能（9 个）
+│   ├── testing/                  # 测试技能（10 个）
+│   └── devops/                   # DevOps 技能（10 个）
+├── templates/                    # 项目模板
+└── examples/                     # 示例项目
 ```
 
 ## Agent 角色
 
-### 前端 Agent
+### 前端 Agent (端口 8201)
+- **职责**：React/Vue/TypeScript/CSS 开发
+- **技能**：react-development, vue-development, nextjs-development, css-tailwind
+- **Hermes**：独立实例，专注前端开发
 
-**职责**：
-- React/Vue 组件开发
-- TypeScript 类型定义
-- UI/UX 实现
-- 样式优化（Tailwind/CSS）
+### 后端 Agent (端口 8202)
+- **职责**：Python/Node.js/Go/API/数据库开发
+- **技能**：python-development, nodejs-development, api-design, database-design
+- **Hermes**：独立实例，专注后端开发
 
-**技能**：
-- 组件架构设计
-- 状态管理（Redux/Zustand）
-- 路由配置
-- 性能优化
+### 测试 Agent (端口 8203)
+- **职责**：单元测试/集成测试/E2E 测试
+- **技能**：pytest-development, jest-development, playwright, e2e-testing
+- **Hermes**：独立实例，专注测试开发
 
-### 后端 Agent
-
-**职责**：
-- API 设计与实现
-- 数据库设计与优化
-- 业务逻辑开发
-- 安全防护
-
-**技能**：
-- RESTful/GraphQL API
-- ORM（Prisma/SQLAlchemy）
-- 认证授权
-- 缓存策略
-
-### 测试 Agent
-
-**职责**：
-- 单元测试编写
-- 集成测试设计
-- E2E 测试自动化
-- 代码覆盖率分析
-
-**技能**：
-- TDD/BDD 实践
-- Mock/Stub 技术
-- 测试数据管理
-- CI 集成
-
-### DevOps Agent
-
-**职责**：
-- CI/CD 流水线
-- Docker 容器化
-- K8s 编排部署
-- 监控告警
-
-**技能**：
-- GitHub Actions
-- Docker Compose
-- Helm Charts
-- Prometheus/Grafana
+### DevOps Agent (端口 8204)
+- **职责**：Docker/K8s/CI-CD/监控
+- **技能**：docker-management, kubernetes-deployment, ci-cd-pipeline
+- **Hermes**：独立实例，专注运维部署
 
 ## 路由规则
 
@@ -110,28 +103,46 @@ cd DEV-Agent
 | 运维 | Docker, K8s, CI/CD, 部署 | devops |
 | 通用 | 代码, 调试, 重构 | 内核 |
 
-## 项目结构
+## 配置
 
+### Agent 实例配置
+```yaml
+# config/openclaw/instances.yaml
+instances:
+  - id: dev-frontend
+    label: "前端开发 Agent"
+    port: 8201
+    hermes_port: 8201
+    tags: ["react", "vue", "typescript", "css"]
+    skills: ["react-development", "vue-development"]
 ```
-DEV-Agent/
-├── README.md
-├── docs/
-│   ├── specs/           # 规格文档
-│   └── plans/           # 实现计划
-├── packages/
-│   ├── gateway/         # 网关服务
-│   └── agents/          # Agent 实现
-│       ├── frontend/    # 前端 Agent
-│       ├── backend/     # 后端 Agent
-│       ├── testing/     # 测试 Agent
-│       └── devops/      # DevOps Agent
-├── config/              # 配置文件
-└── scripts/             # 脚本工具
+
+### OpenClaw 配置
+```yaml
+# OpenClaw 会自动加载 ~/.openclaw/config.yaml
+# 无需额外配置
+```
+
+## 使用示例
+
+```bash
+# 测试前端路由
+openclaw agent --local -m "帮我创建 React 登录组件"
+
+# 测试后端路由
+openclaw agent --local -m "设计用户数据库表结构"
+
+# 测试测试路由
+openclaw agent --local -m "编写单元测试用例"
+
+# 测试 DevOps 路由
+openclaw agent --local -m "配置 Docker 部署"
 ```
 
 ## 相关项目
 
 - [AI-local-OS](https://github.com/Jinchengawu/AI-local-OS) - 基础架构
+- [OpenClaw](https://github.com/openclaw) - 多 Agent 编排框架
 - [Hermes Agent](https://github.com/NousResearch/hermes-agent) - Agent 运行时
 
 ## 许可证
