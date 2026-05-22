@@ -1,7 +1,7 @@
 /**
- * DEV-Agent DevOps Agent
+ * DEV-Agent DevOps Agent (Hermes 集成版)
  * 
- * DevOps 专用 Agent：Docker/K8s/CI-CD/Monitoring
+ * DevOps 专用 Agent：通过 Hermes 实现真正的 AI 能力
  */
 
 import express from 'express';
@@ -12,19 +12,15 @@ interface AgentConfig {
   id: string;
   label: string;
   port: number;
+  hermesPort: number;
   skills: string[];
-}
-
-interface Skill {
-  name: string;
-  description: string;
-  content: string;
 }
 
 const config: AgentConfig = {
   id: 'dev-devops',
   label: 'DevOps Agent',
   port: parseInt(process.env.AGENT_PORT || '8204'),
+  hermesPort: parseInt(process.env.HERMES_PORT || '8204'),
   skills: [
     'docker-management',
     'kubernetes-deployment',
@@ -40,98 +36,58 @@ const config: AgentConfig = {
   ],
 };
 
-function loadSkills(skillsDir: string): Map<string, Skill> {
-  const skills = new Map<string, Skill>();
+function loadSkillContent(skillName: string): string {
+  const skillPath = join(process.cwd(), '../../skills/devops', skillName, 'SKILL.md');
   
-  for (const skillName of config.skills) {
-    const skillPath = join(skillsDir, skillName, 'SKILL.md');
+  if (existsSync(skillPath)) {
+    return readFileSync(skillPath, 'utf-8');
+  }
+  
+  return '';
+}
+
+function buildSystemPrompt(): string {
+  const skills = config.skills.map(skill => {
+    const content = loadSkillContent(skill);
+    return `## ${skill}\n${content.substring(0, 500)}...`;
+  }).join('\n\n');
+
+  return `你是一个专业的 DevOps Agent，专注于 Docker、Kubernetes、CI/CD、监控、基础设施即代码。
+
+你的技能包括：
+${config.skills.map(s => `- ${s}`).join('\n')}
+
+技能详情：
+${skills}
+
+请根据用户的需求，提供专业的 DevOps 建议和配置示例。`;
+}
+
+async function callHermes(message: string): Promise<string> {
+  try {
+    const response = await fetch(`http://127.0.0.1:${config.hermesPort}/v1/chat/completions`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'hermes-agent',
+        messages: [
+          { role: 'system', content: buildSystemPrompt() },
+          { role: 'user', content: message }
+        ],
+        max_tokens: 2000,
+      }),
+      signal: AbortSignal.timeout(60000),
+    });
+
+    if (response.ok) {
+      const data = await response.json() as any;
+      return data.choices?.[0]?.message?.content || '无法生成响应';
+    }
     
-    if (existsSync(skillPath)) {
-      const content = readFileSync(skillPath, 'utf-8');
-      
-      const frontmatterMatch = content.match(/^---\n([\s\S]*?)\n---/);
-      let description = '';
-      
-      if (frontmatterMatch) {
-        const frontmatter = frontmatterMatch[1];
-        const descMatch = frontmatter.match(/description:\s*(.+)/);
-        if (descMatch) {
-          description = descMatch[1].trim();
-        }
-      }
-      
-      skills.set(skillName, {
-        name: skillName,
-        description,
-        content,
-      });
-    }
+    return `Hermes 调用失败: ${response.status}`;
+  } catch (error) {
+    return `Hermes 连接失败: ${error instanceof Error ? error.message : '未知错误'}`;
   }
-  
-  return skills;
-}
-
-const DEVOPS_KEYWORDS = [
-  'docker', 'container', 'kubernetes', 'k8s', 'helm',
-  'ci', 'cd', 'cicd', 'pipeline', 'github actions', 'gitlab ci',
-  'terraform', 'pulumi', 'ansible', 'infrastructure',
-  'monitoring', 'prometheus', 'grafana', 'logging',
-  'deploy', 'deployment', 'devops', '运维', '部署', '容器',
-];
-
-function analyzeIntent(message: string): { matched: boolean; skills: string[] } {
-  const lowerMessage = message.toLowerCase();
-  const matchedSkills: string[] = [];
-  
-  for (const keyword of DEVOPS_KEYWORDS) {
-    if (lowerMessage.includes(keyword.toLowerCase())) {
-      matchedSkills.push(keyword);
-    }
-  }
-  
-  return {
-    matched: matchedSkills.length > 0,
-    skills: matchedSkills,
-  };
-}
-
-function generateResponse(message: string, skills: Map<string, Skill>): string {
-  const intent = analyzeIntent(message);
-  
-  if (!intent.matched) {
-    return `我是一个 DevOps Agent，专注于 Docker/K8s/CI-CD/Monitoring。
-
-我可以帮你：
-- 创建 Dockerfile 和 docker-compose
-- 配置 Kubernetes 部署
-- 设置 CI/CD 流水线
-- 配置监控和告警
-- 实现基础设施即代码
-
-请告诉我你需要什么帮助？`;
-  }
-  
-  const relevantSkills = Array.from(skills.values())
-    .filter(skill => 
-      intent.skills.some(keyword => 
-        skill.name.toLowerCase().includes(keyword) ||
-        skill.description.toLowerCase().includes(keyword)
-      )
-    );
-  
-  if (relevantSkills.length > 0) {
-    const skillList = relevantSkills.map(s => `- ${s.name}: ${s.description}`).join('\n');
-    return `根据你的 DevOps 需求，我可以应用以下技能：
-
-${skillList}
-
-请提供更多细节，我会为你生成相应的配置。`;
-  }
-  
-  return `我理解你的 DevOps 需求。请告诉我具体需要：
-1. 部署什么应用？
-2. 使用什么技术栈？
-3. 部署环境？`;
 }
 
 const app = express();
@@ -142,19 +98,17 @@ app.get('/health', (req, res) => {
     status: 'ok',
     agent: config.id,
     label: config.label,
+    hermesPort: config.hermesPort,
     skills: config.skills.length,
   });
 });
 
-app.post('/v1/chat/completions', (req, res) => {
+app.post('/v1/chat/completions', async (req, res) => {
   try {
     const { messages } = req.body;
     const userMessage = messages?.[0]?.content || '';
     
-    const skillsDir = join(process.cwd(), '../../skills/devops');
-    const skills = loadSkills(skillsDir);
-    
-    const content = generateResponse(userMessage, skills);
+    const content = await callHermes(userMessage);
     
     res.json({
       id: `chatcmpl-${Date.now()}`,
@@ -179,5 +133,6 @@ app.post('/v1/chat/completions', (req, res) => {
 
 app.listen(config.port, () => {
   console.log(`🚀 ${config.label} listening on port ${config.port}`);
+  console.log(`🔗 Hermes integration: http://127.0.0.1:${config.hermesPort}`);
   console.log(`📋 Skills: ${config.skills.join(', ')}`);
 });
