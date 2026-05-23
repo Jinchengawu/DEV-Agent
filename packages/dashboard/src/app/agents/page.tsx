@@ -1,188 +1,199 @@
 'use client'
 
 import { useState } from 'react'
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
-
-interface Agent {
-  id: string
-  name: string
-  description: string
-  port: number
-  status: 'online' | 'offline' | 'error'
-  skills: string[]
-  requests: number
-  uptime: string
-  icon: string
-}
-
-const agents: Agent[] = [
-  {
-    id: 'frontend',
-    name: 'Frontend Agent',
-    description: 'React/Vue/TypeScript/CSS development specialist',
-    port: 8201,
-    status: 'online',
-    skills: ['react-development', 'vue-development', 'nextjs-development', 'css-tailwind', 'typescript-best-practices'],
-    requests: 127,
-    uptime: '2h 34m',
-    icon: '🎨',
-  },
-  {
-    id: 'backend',
-    name: 'Backend Agent',
-    description: 'Python/Node.js/Go/API/Database development specialist',
-    port: 8202,
-    status: 'online',
-    skills: ['python-development', 'nodejs-development', 'go-development', 'api-design', 'database-design'],
-    requests: 89,
-    uptime: '2h 34m',
-    icon: '⚙️',
-  },
-  {
-    id: 'testing',
-    name: 'Testing Agent',
-    description: 'pytest/Jest/Playwright/E2E testing specialist',
-    port: 8203,
-    status: 'online',
-    skills: ['pytest-development', 'jest-development', 'vitest', 'playwright', 'e2e-testing'],
-    requests: 45,
-    uptime: '2h 34m',
-    icon: '🧪',
-  },
-  {
-    id: 'devops',
-    name: 'DevOps Agent',
-    description: 'Docker/K8s/CI-CD/Monitoring specialist',
-    port: 8204,
-    status: 'online',
-    skills: ['docker-management', 'kubernetes-deployment', 'ci-cd-pipeline', 'monitoring-setup', 'terraform-iac'],
-    requests: 23,
-    uptime: '2h 34m',
-    icon: '🚀',
-  },
-]
+import { useRouter } from 'next/navigation'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
+import { SkeletonCard } from '@/components/ui/skeleton'
+import { ErrorState } from '@/components/ui/error-state'
+import { EmptyState } from '@/components/ui/empty-state'
+import { useToast } from '@/components/ui/toast'
+import { useAgentHealth } from '@/hooks/useAgentHealth'
+import { useSkills } from '@/hooks/useSkills'
+import type { AgentStatus } from '@/lib/types'
 
 export default function AgentsPage() {
-  const [selectedAgent, setSelectedAgent] = useState<Agent | null>(null)
+  const router = useRouter()
+  const { showToast } = useToast()
+  const { agents, isLoading, error, mutate } = useAgentHealth()
+  const { skills } = useSkills()
+  const [selectedAgent, setSelectedAgent] = useState<AgentStatus | null>(null)
+
+  function getAgentSkills(agentId: string) {
+    return skills.filter((s) => s.agent === agentId)
+  }
+
+  if (error) {
+    return (
+      <ErrorState
+        title="Failed to load agents"
+        message="Cannot connect to agent services. Ensure agents are running and try again."
+        onRetry={() => mutate()}
+      />
+    )
+  }
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center">
+      <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Agents</h1>
-          <p className="text-gray-500 mt-1">Manage and monitor your AI agents</p>
+          <p className="text-sm text-gray-500 mt-1">
+            Manage and monitor your development agents
+          </p>
         </div>
-        <Button>+ Add Agent</Button>
+        <Button
+          onClick={() => showToast('Add agent feature coming soon', 'info')}
+        >
+          + Add Agent
+        </Button>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Agent List */}
         <div className="lg:col-span-2 space-y-4">
-          {agents.map((agent) => (
-            <Card
-              key={agent.id}
-              className={`cursor-pointer transition-all hover:shadow-lg ${
-                selectedAgent?.id === agent.id ? 'ring-2 ring-blue-500 shadow-lg' : ''
-              }`}
-              onClick={() => setSelectedAgent(agent)}
-            >
-              <CardContent className="p-6">
-                <div className="flex justify-between items-start">
-                  <div className="flex items-center space-x-4">
-                    <div className="w-12 h-12 bg-gradient-to-br from-slate-100 to-slate-200 rounded-xl flex items-center justify-center">
-                      <span className="text-2xl">{agent.icon}</span>
+          {isLoading ? (
+            Array.from({ length: 4 }).map((_, i) => <SkeletonCard key={i} />)
+          ) : agents.length === 0 ? (
+            <EmptyState
+              icon="🤖"
+              title="No agents found"
+              description="Make sure agent services are started"
+            />
+          ) : (
+            agents.map((agent) => (
+              <Card
+                key={agent.id}
+                className={`cursor-pointer transition-all hover:shadow-md ${
+                  selectedAgent?.id === agent.id
+                    ? 'ring-2 ring-blue-500 border-blue-500'
+                    : ''
+                }`}
+                onClick={() => setSelectedAgent(agent)}
+              >
+                <CardContent className="p-6">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center space-x-4">
+                      <div className="w-12 h-12 bg-gradient-to-br from-slate-100 to-slate-200 rounded-xl flex items-center justify-center">
+                        <span className="text-2xl">{agent.icon}</span>
+                      </div>
+                      <div>
+                        <div className="flex items-center space-x-2">
+                          <h3 className="font-semibold text-gray-900">
+                            {agent.name}
+                          </h3>
+                          <Badge
+                            variant={agent.online ? 'default' : 'destructive'}
+                          >
+                            {agent.online ? 'Online' : 'Offline'}
+                          </Badge>
+                        </div>
+                        <p className="text-sm text-gray-500 mt-1">
+                          {agent.label} — Port {agent.port}
+                        </p>
+                      </div>
                     </div>
-                    <div>
-                      <h3 className="text-lg font-semibold text-gray-900">{agent.name}</h3>
-                      <p className="text-sm text-gray-500">{agent.description}</p>
+                    <div className="flex items-center space-x-4 text-sm text-gray-500">
+                      <div className="text-center">
+                        <p className="font-semibold text-gray-900">
+                          {agent.skillCount}
+                        </p>
+                        <p className="text-xs">Skills</p>
+                      </div>
                     </div>
                   </div>
-                  <Badge variant={agent.status === 'online' ? 'default' : 'secondary'}>
-                    {agent.status}
-                  </Badge>
-                </div>
-
-                <div className="mt-4 grid grid-cols-3 gap-4">
-                  <div className="bg-slate-50 rounded-xl p-3">
-                    <p className="text-xs text-gray-500">Port</p>
-                    <p className="font-mono font-semibold text-lg">{agent.port}</p>
-                  </div>
-                  <div className="bg-slate-50 rounded-xl p-3">
-                    <p className="text-xs text-gray-500">Requests</p>
-                    <p className="font-semibold text-lg">{agent.requests}</p>
-                  </div>
-                  <div className="bg-slate-50 rounded-xl p-3">
-                    <p className="text-xs text-gray-500">Uptime</p>
-                    <p className="font-semibold text-lg">{agent.uptime}</p>
-                  </div>
-                </div>
-
-                <div className="mt-4">
-                  <p className="text-sm text-gray-500 mb-2">Skills</p>
-                  <div className="flex flex-wrap gap-2">
-                    {agent.skills.slice(0, 3).map((skill) => (
-                      <Badge key={skill} variant="secondary">
-                        {skill}
-                      </Badge>
-                    ))}
-                    {agent.skills.length > 3 && (
-                      <Badge variant="outline">+{agent.skills.length - 3}</Badge>
-                    )}
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
+                </CardContent>
+              </Card>
+            ))
+          )}
         </div>
 
-        {/* Agent Detail */}
-        <div className="lg:col-span-1">
+        <div>
           {selectedAgent ? (
             <Card className="sticky top-24">
               <CardHeader>
                 <div className="flex items-center space-x-3">
-                  <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-purple-600 rounded-xl flex items-center justify-center">
-                    <span className="text-2xl">{selectedAgent.icon}</span>
+                  <div className="w-10 h-10 bg-gradient-to-br from-slate-100 to-slate-200 rounded-xl flex items-center justify-center">
+                    <span className="text-xl">{selectedAgent.icon}</span>
                   </div>
                   <div>
                     <CardTitle>{selectedAgent.name}</CardTitle>
-                    <p className="text-sm text-gray-500">Port {selectedAgent.port}</p>
+                    <p className="text-sm text-gray-500">{selectedAgent.label}</p>
                   </div>
                 </div>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div>
-                  <p className="text-sm text-gray-500">Description</p>
-                  <p className="text-gray-900">{selectedAgent.description}</p>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="bg-slate-50 rounded-lg p-3 text-center">
+                    <p className="text-2xl font-bold text-gray-900">
+                      {selectedAgent.port}
+                    </p>
+                    <p className="text-xs text-gray-500">Port</p>
+                  </div>
+                  <div className="bg-slate-50 rounded-lg p-3 text-center">
+                    <p className="text-2xl font-bold text-gray-900">
+                      {selectedAgent.skillCount}
+                    </p>
+                    <p className="text-xs text-gray-500">Skills</p>
+                  </div>
                 </div>
 
                 <div>
-                  <p className="text-sm text-gray-500 mb-2">All Skills</p>
-                  <div className="flex flex-wrap gap-2">
-                    {selectedAgent.skills.map((skill) => (
-                      <Badge key={skill} variant="default">
-                        {skill}
+                  <h4 className="text-sm font-medium text-gray-700 mb-2">
+                    Tags
+                  </h4>
+                  <div className="flex flex-wrap gap-1">
+                    {selectedAgent.tags.map((tag) => (
+                      <Badge key={tag} variant="secondary">
+                        {tag}
                       </Badge>
                     ))}
                   </div>
                 </div>
 
-                <div className="pt-4 space-y-2">
-                  <Button className="w-full">
-                    💬 Open Chat
+                <div>
+                  <h4 className="text-sm font-medium text-gray-700 mb-2">
+                    Skills ({getAgentSkills(selectedAgent.id).length})
+                  </h4>
+                  <div className="flex flex-wrap gap-1">
+                    {getAgentSkills(selectedAgent.id).length > 0
+                      ? getAgentSkills(selectedAgent.id).map((skill) => (
+                          <Badge key={skill.id} variant="outline">
+                            {skill.name}
+                          </Badge>
+                        ))
+                      : (
+                        <span className="text-sm text-gray-400">
+                          No skills loaded
+                        </span>
+                      )}
+                  </div>
+                </div>
+
+                <div className="space-y-2 pt-2">
+                  <Button
+                    className="w-full"
+                    disabled={!selectedAgent.online}
+                    onClick={() =>
+                      router.push(`/chat?agent=${selectedAgent.id}`)
+                    }
+                  >
+                    Open Chat
                   </Button>
-                  <Button variant="outline" className="w-full">
-                    📋 View Logs
+                  <Button
+                    variant="outline"
+                    className="w-full"
+                    onClick={() => showToast('Log viewer coming soon', 'info')}
+                  >
+                    View Logs
                   </Button>
                 </div>
               </CardContent>
             </Card>
           ) : (
             <Card>
-              <CardContent className="p-12 text-center text-gray-500">
-                <div className="text-4xl mb-4">👈</div>
+              <CardContent className="py-8 text-center text-gray-500">
+                <p className="text-3xl mb-2">👈</p>
                 <p>Select an agent to view details</p>
               </CardContent>
             </Card>
