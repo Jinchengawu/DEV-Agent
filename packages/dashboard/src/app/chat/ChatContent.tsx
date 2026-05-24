@@ -9,9 +9,7 @@ import { useToast } from '@/components/ui/toast'
 import { AGENTS, detectAgent } from '@/lib/agents'
 import type { ChatMessage } from '@/lib/types'
 
-const AGENT_LIST = Object.entries(AGENTS).map(([, info]) => ({
-  ...info,
-}))
+const AGENT_LIST = Object.entries(AGENTS).map(([, info]) => ({ ...info }))
 
 const WELCOME_MESSAGE: ChatMessage = {
   id: 'welcome',
@@ -22,16 +20,34 @@ const WELCOME_MESSAGE: ChatMessage = {
   timestamp: Date.now(),
 }
 
+function getWelcomeMessage(agentId: string): ChatMessage {
+  if (!agentId) return WELCOME_MESSAGE
+  const info = AGENTS[agentId]
+  if (!info) return WELCOME_MESSAGE
+  return {
+    id: `welcome-${agentId}`,
+    role: 'assistant',
+    content: `Hi, I'm the ${info.name}. I specialize in ${info.label}. How can I help you today?`,
+    agentId: info.id,
+    timestamp: Date.now(),
+  }
+}
+
 export default function ChatContent() {
   const searchParams = useSearchParams()
   const { showToast } = useToast()
   const initialAgent = searchParams.get('agent') || ''
+
   const [selectedAgent, setSelectedAgent] = useState<string>(initialAgent)
-  const [messages, setMessages] = useState<ChatMessage[]>([WELCOME_MESSAGE])
-  const [sessionId, setSessionId] = useState('')
+  const [conversations, setConversations] = useState<Record<string, ChatMessage[]>>({})
+  const [sessions, setSessions] = useState<Record<string, string>>({})
   const [input, setInput] = useState('')
   const [isSending, setIsSending] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
+
+  const agentKey = selectedAgent || 'auto'
+  const currentMessages = conversations[agentKey] || [getWelcomeMessage(selectedAgent)]
+  const currentSessionId = sessions[agentKey] || ''
 
   const scrollToBottom = useCallback(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -39,7 +55,7 @@ export default function ChatContent() {
 
   useEffect(() => {
     scrollToBottom()
-  }, [messages, scrollToBottom])
+  }, [currentMessages, isSending, scrollToBottom])
 
   useEffect(() => {
     if (initialAgent) {
@@ -47,30 +63,62 @@ export default function ChatContent() {
     }
   }, [initialAgent])
 
+  const addMessage = useCallback((key: string, msg: ChatMessage) => {
+    setConversations((prev) => {
+      const msgs = [...(prev[key] || [getWelcomeMessage(key === 'auto' ? '' : key)])]
+      msgs.push(msg)
+      return { ...prev, [key]: msgs }
+    })
+  }, [])
+
+  const clearConversation = useCallback(() => {
+    setConversations((prev) => {
+      const next = { ...prev }
+      delete next[agentKey]
+      return next
+    })
+    setSessions((prev) => {
+      const next = { ...prev }
+      delete next[agentKey]
+      return next
+    })
+    showToast('Conversation cleared', 'info')
+  }, [agentKey, showToast])
+
   const handleSend = async () => {
     if (!input.trim() || isSending) return
+
+    const targetAgent = selectedAgent || detectAgent(input.trim())
+    const key = agentKey
 
     const userMessage: ChatMessage = {
       id: `user-${Date.now()}`,
       role: 'user',
       content: input.trim(),
+      agentId: targetAgent,
       timestamp: Date.now(),
     }
 
-    setMessages((prev) => [...prev, userMessage])
+    addMessage(key, userMessage)
     setInput('')
     setIsSending(true)
 
-    const targetAgent = selectedAgent || detectAgent(input.trim())
+    // Build conversation history for this agent/session
+    const history = (conversations[key] || [])
+      .filter((m) => m.id !== 'welcome' && !m.id.startsWith('welcome-'))
+      .map((m) => ({ role: m.role, content: m.content }))
+
+    // Add the new user message
+    history.push({ role: 'user', content: input.trim() })
 
     try {
       const res = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          messages: [{ role: 'user', content: input.trim() }],
+          messages: history,
           agentId: targetAgent,
-          sessionId: sessionId || undefined,
+          sessionId: currentSessionId || undefined,
         }),
       })
 
@@ -80,8 +128,8 @@ export default function ChatContent() {
         throw new Error(data.error || `HTTP ${res.status}`)
       }
 
-      if (data.sessionId && !sessionId) {
-        setSessionId(data.sessionId)
+      if (data.sessionId && !currentSessionId) {
+        setSessions((prev) => ({ ...prev, [key]: data.sessionId }))
       }
 
       const agentMessage: ChatMessage = {
@@ -92,10 +140,9 @@ export default function ChatContent() {
         timestamp: Date.now(),
       }
 
-      setMessages((prev) => [...prev, agentMessage])
+      addMessage(key, agentMessage)
     } catch (e) {
-      const errorMsg =
-        e instanceof Error ? e.message : 'Unknown error occurred'
+      const errorMsg = e instanceof Error ? e.message : 'Unknown error occurred'
       showToast(`Failed: ${errorMsg}`, 'error')
 
       const errorMessage: ChatMessage = {
@@ -105,7 +152,7 @@ export default function ChatContent() {
         agentId: 'system',
         timestamp: Date.now(),
       }
-      setMessages((prev) => [...prev, errorMessage])
+      addMessage(key, errorMessage)
     } finally {
       setIsSending(false)
     }
@@ -118,7 +165,16 @@ export default function ChatContent() {
     }
   }
 
-  function getAgentDisplayInfo(agentId: string) {
+  const handleSwitchAgent = (id: string) => {
+    if (id === selectedAgent) {
+      setSelectedAgent('')
+    } else {
+      setSelectedAgent(id)
+    }
+  }
+
+  function getAgentDisplayInfo(agentId: string | undefined) {
+    if (!agentId || agentId === 'system') return { icon: '🤖', name: 'System' }
     const agent = AGENTS[agentId]
     if (!agent) return { icon: '🤖', name: 'System' }
     return { icon: agent.icon, name: agent.name }
@@ -129,13 +185,18 @@ export default function ChatContent() {
       <Card className="flex-1 flex flex-col overflow-hidden">
         <CardHeader className="border-b">
           <div className="flex items-center justify-between">
-            <h2 className="text-lg font-bold text-gray-900">
-              💬 Chat with Agents
-            </h2>
+            <div className="flex items-center space-x-3">
+              <h2 className="text-lg font-bold text-gray-900">💬 Chat</h2>
+              {currentMessages.length > 1 && (
+                <Button variant="ghost" size="sm" onClick={clearConversation}>
+                  🗑️ Clear
+                </Button>
+              )}
+            </div>
             <div className="flex space-x-1.5">
               <Badge
                 variant={selectedAgent === '' ? 'default' : 'outline'}
-                className="cursor-pointer"
+                className="cursor-pointer select-none"
                 onClick={() => setSelectedAgent('')}
               >
                 Auto
@@ -143,40 +204,34 @@ export default function ChatContent() {
               {AGENT_LIST.map((agent) => (
                 <Badge
                   key={agent.id}
-                  variant={
-                    selectedAgent === agent.id ? 'default' : 'outline'
-                  }
-                  className="cursor-pointer"
-                  onClick={() =>
-                    setSelectedAgent(
-                      selectedAgent === agent.id ? '' : agent.id
-                    )
-                  }
+                  variant={selectedAgent === agent.id ? 'default' : 'outline'}
+                  className="cursor-pointer select-none"
+                  onClick={() => handleSwitchAgent(agent.id)}
                 >
                   {agent.icon} {agent.label}
                 </Badge>
               ))}
             </div>
           </div>
-          {selectedAgent && (
+          {selectedAgent ? (
             <p className="text-xs text-blue-600 mt-1">
-              Routing to: {AGENTS[selectedAgent]?.name || selectedAgent}
+              Routing all messages to: {AGENTS[selectedAgent]?.name || selectedAgent}
+            </p>
+          ) : (
+            <p className="text-xs text-gray-400 mt-1">
+              Auto-routing based on message content
             </p>
           )}
         </CardHeader>
 
         <CardContent className="flex-1 overflow-y-auto p-4 space-y-4">
-          {messages.map((message) => {
-            const displayInfo = message.agentId
-              ? getAgentDisplayInfo(message.agentId)
-              : { icon: '🤖', name: 'System' }
+          {currentMessages.map((message) => {
+            const displayInfo = getAgentDisplayInfo(message.agentId)
 
             return (
               <div
                 key={message.id}
-                className={`flex ${
-                  message.role === 'user' ? 'justify-end' : 'justify-start'
-                }`}
+                className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
               >
                 <div
                   className={`max-w-[75%] rounded-2xl p-4 ${
@@ -187,9 +242,7 @@ export default function ChatContent() {
                 >
                   <div
                     className={`text-xs font-medium mb-2 flex items-center space-x-2 ${
-                      message.role === 'user'
-                        ? 'text-blue-100'
-                        : 'text-gray-500'
+                      message.role === 'user' ? 'text-blue-100' : 'text-gray-500'
                     }`}
                   >
                     <span className="w-5 h-5 bg-white/20 rounded-full flex items-center justify-center text-xs">
@@ -202,9 +255,7 @@ export default function ChatContent() {
                   </div>
                   <div
                     className={`text-xs mt-2 ${
-                      message.role === 'user'
-                        ? 'text-blue-100'
-                        : 'text-gray-400'
+                      message.role === 'user' ? 'text-blue-100' : 'text-gray-400'
                     }`}
                   >
                     {new Date(message.timestamp).toLocaleTimeString()}
@@ -220,18 +271,10 @@ export default function ChatContent() {
                 <div className="flex items-center space-x-2">
                   <div className="flex space-x-1">
                     <div className="w-2 h-2 bg-blue-400 rounded-full animate-bounce"></div>
-                    <div
-                      className="w-2 h-2 bg-blue-400 rounded-full animate-bounce"
-                      style={{ animationDelay: '0.1s' }}
-                    ></div>
-                    <div
-                      className="w-2 h-2 bg-blue-400 rounded-full animate-bounce"
-                      style={{ animationDelay: '0.2s' }}
-                    ></div>
+                    <div className="w-2 h-2 bg-blue-400 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
+                    <div className="w-2 h-2 bg-blue-400 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
                   </div>
-                  <span className="text-sm text-gray-500">
-                    Agent thinking...
-                  </span>
+                  <span className="text-sm text-gray-500">Agent thinking...</span>
                 </div>
               </div>
             </div>
@@ -269,7 +312,6 @@ export default function ChatContent() {
               { label: 'Design API', text: 'Design a RESTful user API endpoint with Express' },
               { label: 'Write tests', text: 'Write unit tests for an authentication module' },
               { label: 'Create Dockerfile', text: 'Create a Dockerfile for a Node.js application' },
-              { label: 'Write PRD', text: 'Write a product requirements document for a user authentication feature' },
             ].map((suggestion) => (
               <Button
                 key={suggestion.label}
