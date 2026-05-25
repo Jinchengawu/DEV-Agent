@@ -302,32 +302,47 @@ export function createAgentApp(config: AgentFactoryConfig): AgentApp {
 
 async function callHermes(
   hermesPort: number,
-  messages: { role: string; content: string }[]
+  messages: { role: string; content: string }[],
+  retries = 3
 ): Promise<string> {
-  try {
-    const response = await fetch(
-      `http://127.0.0.1:${hermesPort}/v1/chat/completions`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          model: 'hermes-agent',
-          messages,
-          max_tokens: 2000,
-        }),
-        signal: AbortSignal.timeout(60000),
-      }
-    );
+  let lastError = '';
 
-    if (response.ok) {
-      const data = (await response.json()) as {
-        choices?: { message?: { content?: string } }[];
-      };
-      return data.choices?.[0]?.message?.content || '无法生成响应';
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      const response = await fetch(
+        `http://127.0.0.1:${hermesPort}/v1/chat/completions`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            model: 'hermes-agent',
+            messages,
+            max_tokens: 2000,
+          }),
+          signal: AbortSignal.timeout(60000),
+        }
+      );
+
+      if (response.ok) {
+        const data = (await response.json()) as {
+          choices?: { message?: { content?: string } }[];
+        };
+        const content = data.choices?.[0]?.message?.content;
+        if (content) return content;
+        lastError = '模型返回空内容';
+      } else if (response.status >= 500) {
+        lastError = `服务异常 (HTTP ${response.status})`;
+      } else {
+        return `请求参数错误 (HTTP ${response.status})`;
+      }
+    } catch (error) {
+      lastError = `连接失败: ${error instanceof Error ? error.message : '未知错误'}`;
     }
 
-    return `Hermes 调用失败: ${response.status}`;
-  } catch (error) {
-    return `Hermes 连接失败: ${error instanceof Error ? error.message : '未知错误'}`;
+    if (attempt < retries) {
+      await new Promise((resolve) => setTimeout(resolve, 2000 * (attempt + 1)));
+    }
   }
+
+  return `模型调用失败 (已重试 ${retries} 次): ${lastError}`;
 }
