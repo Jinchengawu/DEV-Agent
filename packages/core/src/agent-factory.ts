@@ -320,6 +320,7 @@ async function callHermes(
             model: 'hermes-agent',
             messages,
             max_tokens: 8192,
+            thinking: { type: 'disabled' },
           }),
           signal: AbortSignal.timeout(180000),
         }
