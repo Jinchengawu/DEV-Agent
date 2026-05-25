@@ -30,7 +30,7 @@ export async function POST(request: NextRequest) {
     }
 
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 60000);
+    const timeout = setTimeout(() => controller.abort(), 300000);
 
     const res = await fetch(
       `http://localhost:${port}/v1/chat/completions`,

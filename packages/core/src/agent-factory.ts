@@ -305,7 +305,7 @@ export function createAgentApp(config: AgentFactoryConfig): AgentApp {
 async function callHermes(
   hermesPort: number,
   messages: { role: string; content: string }[],
-  retries = 3
+  retries = 5
 ): Promise<string> {
   let lastError = '';
 
@@ -343,7 +343,8 @@ async function callHermes(
     }
 
     if (attempt < retries) {
-      await new Promise((resolve) => setTimeout(resolve, 2000 * (attempt + 1)));
+      // 指数退避: 2s, 4s, 8s, 16s, 32s
+      await new Promise((resolve) => setTimeout(resolve, 1000 * Math.pow(2, attempt + 1)));
     }
   }
 
