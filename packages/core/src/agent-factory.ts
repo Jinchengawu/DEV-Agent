@@ -317,9 +317,9 @@ async function callHermes(
           body: JSON.stringify({
             model: 'hermes-agent',
             messages,
-            max_tokens: 2000,
+            max_tokens: 8192,
           }),
-          signal: AbortSignal.timeout(60000),
+          signal: AbortSignal.timeout(180000),
         }
       );
 
