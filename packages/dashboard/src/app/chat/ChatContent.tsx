@@ -268,36 +268,37 @@ export default function ChatContent() {
   return (
     <div className="flex flex-col h-[calc(100vh-200px)]">
       {/* ── Agent Tabs ── */}
-      <div className="flex items-end gap-0.5 mb-2 overflow-x-auto border-b border-slate-200 pb-0">
-        {tabs.map((tab, i) => {
-          const agent = AGENTS[tab.id]
-          const isActive = i === activeTab
-          const isSending = !!sending[tab.id]
-          return (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(i)}
-              className={`flex items-center gap-1.5 px-3 py-2 rounded-t-lg text-sm whitespace-nowrap transition-all ${
-                isActive
-                  ? 'bg-white border border-b-0 border-slate-200 text-gray-900 font-medium -mb-px'
-                  : 'bg-transparent text-gray-500 hover:text-gray-700 hover:bg-slate-50 border border-transparent'
-              }`}
-            >
-              <span>{agent?.icon || '🤖'}</span>
-              <span className="max-w-[100px] truncate">{agent?.name || agent?.label || 'Auto'}</span>
-              {isSending && (
-                <span className="w-1.5 h-1.5 bg-blue-500 rounded-full animate-pulse flex-shrink-0" />
-              )}
-              <span
-                onClick={(e) => { e.stopPropagation(); e.preventDefault(); closeTab(i) }}
-                className="ml-0.5 text-gray-400 hover:text-red-500 text-xs flex-shrink-0 w-4 h-4 flex items-center justify-center rounded hover:bg-red-50"
+      <div className="flex items-end gap-0.5 mb-2 border-b border-slate-200 pb-0">
+        <div className="flex items-end gap-0.5 overflow-x-auto flex-1 pb-0">
+          {tabs.map((tab, i) => {
+            const agent = AGENTS[tab.id]
+            const isActive = i === activeTab
+            const isSending = !!sending[tab.id]
+            return (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(i)}
+                className={`flex items-center gap-1.5 px-3 py-2 rounded-t-lg text-sm whitespace-nowrap transition-all ${
+                  isActive
+                    ? 'bg-white border border-b-0 border-slate-200 text-gray-900 font-medium -mb-px'
+                    : 'bg-transparent text-gray-500 hover:text-gray-700 hover:bg-slate-50 border border-transparent'
+                }`}
               >
-                ×
-              </span>
-            </button>
-          )
-        })}
-        {/* "添加 Agent" — 点击触发下拉 */}
+                <span>{agent?.icon || '🤖'}</span>
+                <span className="max-w-[100px] truncate">{agent?.name || agent?.label || 'Auto'}</span>
+                {isSending && (
+                  <span className="w-1.5 h-1.5 bg-blue-500 rounded-full animate-pulse flex-shrink-0" />
+                )}
+                <span
+                  onClick={(e) => { e.stopPropagation(); e.preventDefault(); closeTab(i) }}
+                  className="ml-0.5 text-gray-400 hover:text-red-500 text-xs flex-shrink-0 w-4 h-4 flex items-center justify-center rounded hover:bg-red-50"
+                >
+                  ×
+                </span>
+              </button>
+            )
+          })}
+        </div>
         <div className="relative flex-shrink-0">
           <button
             onClick={() => setShowAddMenu(!showAddMenu)}
